@@ -10,7 +10,7 @@ Frontend (Next.js)
   └→ NestJS API (scan-now, AI score/reply)
 
 NestJS Backend
-  ├→ Reddit API (snoowrap, cron every 5 min)
+  ├→ Reddit API (snoowrap, cron hourly)
   ├→ OpenAI (scoring + reply)
   └→ Supabase (insert leads via service_role)
 
@@ -21,6 +21,17 @@ Supabase
 
 ## Quick Start
 
+### 0. Node
+
+В корне лежит `.nvmrc` с рекомендуемой версией Node (20.19+). С nvm:
+
+```bash
+nvm use
+# или: nvm install
+```
+
+Если `yarn install` ругается на версию Node, используй: `yarn install --ignore-engines`.
+
 ### 1. Supabase Setup
 
 1. Create project at [supabase.com](https://supabase.com)
@@ -29,19 +40,26 @@ Supabase
 
 ### 2. Environment
 
+Один источник переменных — корневой `.env`:
+
 ```bash
 cp .env.example .env
-# Fill: SUPABASE_*, REDDIT_*, AI_API_KEY, NEXT_PUBLIC_API_URL
+# Заполни: SUPABASE_*, REDDIT_*, AI_*, NEXT_PUBLIC_* и др.
 ```
+
+Переменные `NEXT_PUBLIC_*` при запуске `yarn dev` / `yarn build` автоматически копируются в `apps/frontend/.env.local` (скрипт `scripts/sync-frontend-env.js`). Ручной копировать не нужно.
 
 ### 3. Run
 
+Запуск из корня репозитория (чтобы подхватывался `.env`):
+
 ```bash
 yarn install
-# Backend
-yarn workspace backend dev   # :3001
-# Frontend
-yarn workspace frontend dev # :3000
+# Оба приложения
+yarn dev
+# Или по отдельности:
+yarn dev:backend   # :3001
+yarn dev:frontend  # :3000 (перед стартом синхронизирует env из корня)
 ```
 
 ## API
@@ -55,6 +73,12 @@ yarn workspace frontend dev # :3000
 - `POST /api/ai/score-lead` — rescore lead (Bearer token)
 - `POST /api/ai/generate-reply-lead` — AI reply (Bearer token)
 - `GET /api/jobs/status` — service status
+
+## Reddit API (compliance)
+
+- **Cron**: scan runs **hourly** to stay under ~100 Reddit API requests/hour and avoid throttle/ban.
+- **User-Agent**: neutral (`RedditResearchTool/1.0`); no "leadgen" wording.
+- **When applying for API access**: do **not** use "lead generation" in the description (auto-reject). Use e.g. "B2B community insights", "market research", "discovery of high-intent discussions in public subreddits". Read-only, no automated posting.
 
 ## Deploy
 

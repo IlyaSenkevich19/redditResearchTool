@@ -12,7 +12,14 @@ import { JobsModule } from './modules/jobs/jobs.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      /**
+       * When running via `yarn workspace backend dev` the CWD is `apps/backend`,
+       * so we also look two levels up to load the root .env.
+       */
+      envFilePath: ['.env', '../../.env'],
+    }),
     ScheduleModule.forRoot(),
     SupabaseModule,
     AuthModule,

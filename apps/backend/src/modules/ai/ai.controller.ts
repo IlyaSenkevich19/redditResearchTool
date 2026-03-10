@@ -108,4 +108,14 @@ export class AiController {
     );
     return { reply };
   }
+
+  @Post('analyze-website')
+  @UseGuards(SupabaseGuard)
+  @ApiBearerAuth()
+  async analyzeWebsite(@Body('website') website: string) {
+    if (!website || typeof website !== 'string' || !website.trim()) {
+      throw new ForbiddenException('website is required');
+    }
+    return this.aiService.analyzeWebsite(website.trim());
+  }
 }

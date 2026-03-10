@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { authApi } from '@/lib/api';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { LogOut, ChevronDown } from 'lucide-react';
 
@@ -24,8 +25,9 @@ export function UserMenu() {
   }, []);
 
   async function handleSignOut() {
-    await createClient().auth.signOut();
-    router.push('/');
+    await authApi.signOut();
+    toast.success('Logged out');
+    router.push('/auth/login');
     router.refresh();
     setOpen(false);
   }

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth-context';
-import { supabase } from '@/lib/api';
+import { campaignsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -11,17 +12,31 @@ import { X } from 'lucide-react';
 export function CreateCampaignModal({
   onClose,
   onCreated,
+  projectId = null,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  projectId?: number | null;
 }) {
   const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [keywordsStr, setKeywordsStr] = useState('');
   const [subredditsStr, setSubredditsStr] = useState('');
   const [scoreThreshold, setScoreThreshold] = useState(80);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,12 +53,14 @@ export function CreateCampaignModal({
     setLoading(true);
     setError('');
     try {
-      await supabase.campaigns.create({
+      await campaignsApi.createCampaign({
         name,
         keywords,
         subreddits,
         score_threshold: scoreThreshold,
+        project_id: projectId ?? undefined,
       });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create campaign');
@@ -53,11 +70,27 @@ export function CreateCampaignModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="max-w-md w-full">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-campaign-title"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <Card
+        className="max-w-md w-full"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <CardHeader className="flex flex-row items-center justify-between">
-          <h3 className="font-semibold">New Campaign</h3>
-          <Button size="sm" variant="ghost" onClick={onClose}>
+          <h3
+            id="create-campaign-title"
+            className="text-base font-semibold leading-none tracking-tight"
+          >
+            New Campaign
+          </h3>
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>
@@ -66,6 +99,7 @@ export function CreateCampaignModal({
             <div>
               <label className="text-sm font-medium mb-1 block">Name</label>
               <Input
+                autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. SaaS leads"

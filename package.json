@@ -5,10 +5,10 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
+    "dev": "node scripts/sync-frontend-env.js && turbo run dev",
+    "build": "node scripts/sync-frontend-env.js && turbo run build",
     "lint": "turbo run lint",
-    "dev:frontend": "turbo run dev --filter=frontend",
+    "dev:frontend": "node scripts/sync-frontend-env.js && turbo run dev --filter=frontend",
     "dev:backend": "turbo run dev --filter=backend"
   },
   "devDependencies": {

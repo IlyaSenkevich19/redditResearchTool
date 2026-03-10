@@ -1,8 +1,10 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import Snoowrap from 'snoowrap';
 import { SupabaseService } from '../supabase/supabase.service';
 import { AiService } from '../ai/ai.service';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Snoowrap = require('snoowrap');
 
 export interface RedditPost {
   id: string;
@@ -17,7 +19,7 @@ export interface RedditPost {
 
 @Injectable()
 export class RedditService implements OnModuleInit {
-  private client: Snoowrap | null = null;
+  private client: any | null = null;
 
   constructor(
     private readonly supabase: SupabaseService,
@@ -31,7 +33,8 @@ export class RedditService implements OnModuleInit {
 
     if (clientId && clientSecret && refreshToken) {
       this.client = new Snoowrap({
-        userAgent: 'reddit-leadgen/1.0',
+        // Neutral UA: avoid "leadgen" wording (Reddit may auto-reject)
+        userAgent: 'RedditResearchTool/1.0 (B2B community insights)',
         clientId,
         clientSecret,
         refreshToken,
@@ -70,9 +73,9 @@ export class RedditService implements OnModuleInit {
             });
             leadsAdded++;
           }
-          await this.delay(300);
+          await this.delay(500);
         }
-        await this.delay(700);
+        await this.delay(1000);
       } catch (err) {
         console.error(`Scan error for campaign ${campaign.id}:`, err);
       }
@@ -81,7 +84,9 @@ export class RedditService implements OnModuleInit {
     return { processed: campaigns.length, leadsAdded };
   }
 
-  @Cron('*/5 * * * *')
+  // Stay under ~100 Reddit API requests/hour to avoid throttle/ban.
+  // Runs hourly; each run = 1 request per subreddit per campaign.
+  @Cron('0 * * * *')
   async handleCronScan() {
     if (!this.client) return;
     try {
@@ -116,7 +121,7 @@ export class RedditService implements OnModuleInit {
         listing = await sub.getNew({ limit });
     }
 
-    return listing.map((p: Snoowrap.Submission) => ({
+    return listing.map((p: any) => ({
       id: p.id,
       subreddit: p.subreddit.display_name,
       author: p.author?.name ?? '[deleted]',
@@ -153,7 +158,7 @@ export class RedditService implements OnModuleInit {
             allPosts.push(post);
           }
         }
-        await this.delay(700);
+        await this.delay(1000);
       } catch (err) {
         console.error(`Reddit fetch error for r/${sub}:`, err);
       }

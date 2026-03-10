@@ -1,85 +1,138 @@
 'use client';
 
-import { useAuth } from '@/contexts/auth-context';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/api';
+import { useState } from 'react';
+import { useCampaigns } from '@/lib/queries';
+import { useProject } from '@/contexts/project-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { CreateCampaignModal } from '@/components/campaigns/create-campaign-modal';
-
-interface Campaign {
-  id: number;
-  name: string;
-  keywords: string[];
-  subreddits: string[];
-  score_threshold: number;
-  is_active: boolean;
-  created_at: string;
-}
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import type { Campaign } from '@/lib/types/campaign';
 
 export default function CampaignsPage() {
-  const { accessToken } = useAuth();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { projectId } = useProject();
+  const [campaignsState, setCampaignsState] = useState<Campaign[]>([]);
   const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => {
-    if (!accessToken) return;
-    supabase.campaigns
-      .list()
-      .then(setCampaigns)
-      .catch(() => setCampaigns([]))
-      .finally(() => setLoading(false));
-  }, [accessToken]);
+  const {
+    data: campaignsData = [],
+    isLoading: loading,
+    refetch,
+  } = useCampaigns(projectId);
+
+  const campaigns = campaignsState.length ? campaignsState : campaignsData;
 
   function handleCreated() {
     setShowCreate(false);
-    if (accessToken) {
-      supabase.campaigns.list().then(setCampaigns);
-    }
+    refetch();
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold">Campaigns</h1>
-        <Button onClick={() => setShowCreate(true)}>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure which keywords and subreddits your scanner tracks.
+          </p>
+        </div>
+        <Button
+          onClick={() => setShowCreate(true)}
+          className="bg-accent text-white rounded-xl shadow-soft hover:opacity-90"
+        >
           <Plus className="h-4 w-4 mr-2" />
           New Campaign
         </Button>
       </div>
+
       {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {campaigns.map((c) => (
-            <Card key={c.id} className={!c.is_active ? 'opacity-60' : ''}>
-              <CardHeader>
-                <CardTitle className="text-base">{c.name}</CardTitle>
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <Card
+              key={idx}
+              className="glass rounded-2xl border-0 shadow-soft animate-pulse"
+            >
+              <CardHeader className="p-5 pb-3">
+                <div className="h-4 w-24 bg-white/10 rounded-full mb-2" />
+                <div className="h-3 w-32 bg-white/5 rounded-full" />
               </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Keywords: {(c.keywords ?? []).slice(0, 3).join(', ')}
-                  {(c.keywords ?? []).length > 3 && '...'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Subreddits: r/{(c.subreddits ?? []).slice(0, 2).join(', r/')}
-                  {(c.subreddits ?? []).length > 2 && '...'}
-                </p>
-                <p className="text-xs">
-                  Score threshold: {c.score_threshold} ·{' '}
-                  {c.is_active ? 'Active' : 'Paused'}
-                </p>
-                <a
-                  href={`/dashboard?campaignId=${c.id}`}
-                  className="text-sm text-primary hover:underline"
-                >
-                  View leads →
-                </a>
+              <CardContent className="p-5 pt-0 space-y-3">
+                <div className="h-3 w-40 bg-white/5 rounded-full" />
+                <div className="h-3 w-32 bg-white/5 rounded-full" />
+                <div className="h-2 w-full bg-white/5 rounded-full" />
               </CardContent>
             </Card>
           ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {campaigns.map((c) => {
+            const keywordCount = (c.keywords ?? []).length;
+            const maxKeywords = 12;
+            const keywordProgress = Math.min(
+              100,
+              (keywordCount / maxKeywords) * 100 || 10,
+            );
+
+            return (
+              <Card
+                key={c.id}
+                className={`glass rounded-2xl border-0 shadow-soft hover:shadow-premium transition-colors ${
+                  !c.is_active ? 'opacity-70' : ''
+                }`}
+              >
+                <CardHeader className="p-5 pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-base">{c.name}</CardTitle>
+                    <Badge variant={c.is_active ? 'success' : 'glass'}>
+                      {c.is_active ? 'Active' : 'Paused'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5 pt-0 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {(c.keywords ?? []).slice(0, 3).join(', ') ||
+                      'No keywords yet'}
+                    {(c.keywords ?? []).length > 3 && '…'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Subreddits: r/
+                    {(c.subreddits ?? []).slice(0, 2).join(', r/') || 'all'}
+                    {(c.subreddits ?? []).length > 2 && '…'}
+                  </p>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Keyword coverage</span>
+                      <span>
+                        {keywordCount}/{maxKeywords}
+                      </span>
+                    </div>
+                    <Progress value={keywordProgress} />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <a href={`/dashboard?campaignId=${c.id}`} className="flex-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full rounded-xl glass border-border hover:bg-white/10"
+                      >
+                        View Leads
+                      </Button>
+                    </a>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-xl hover:bg-white/5"
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
       {campaigns.length === 0 && !loading && (
@@ -91,6 +144,7 @@ export default function CampaignsPage() {
         <CreateCampaignModal
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
+          projectId={projectId}
         />
       )}
     </div>
