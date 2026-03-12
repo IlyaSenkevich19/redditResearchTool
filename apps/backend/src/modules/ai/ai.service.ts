@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { SCORING_PROMPT, REPLY_PROMPT, WEBSITE_ANALYSIS_PROMPT } from './prompts';
-import type { PostInput, ScoringResponse, WebsiteAnalysisResponse } from './types';
+import type { IntentAnalysis, PostInput, ScoringResponse, WebsiteAnalysisResponse } from './types';
 
 @Injectable()
 export class AiService {
@@ -28,9 +28,9 @@ export class AiService {
   }
 
   /**
-   * Intent scoring 0-100. Universal prompts work with xAI Grok, AIAI.BY, OpenAI.
+   * Full intent analysis (context-aware).
    */
-  async scoreIntent(title: string, content: string): Promise<number> {
+  async analyzeIntent(title: string, content: string): Promise<IntentAnalysis> {
     const post = `${title}\n\n${content}`.slice(0, 2000);
     const prompt = SCORING_PROMPT.replace('{{post}}', post);
 
@@ -42,19 +42,71 @@ export class AiService {
     });
 
     const raw = response.choices[0]?.message?.content?.trim() ?? '{"score":0}';
-    return this.parseScore(raw);
+    return this.parseIntent(raw);
   }
 
-  private parseScore(raw: string): number {
+  /**
+   * Backwards compatible wrapper that returns only numeric score.
+   */
+  async scoreIntent(title: string, content: string): Promise<number> {
+    const analysis = await this.analyzeIntent(title, content);
+    return analysis.score;
+  }
+
+  private parseIntent(raw: string): IntentAnalysis {
     try {
       const cleaned = raw.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(cleaned) as ScoringResponse;
-      const score = typeof parsed.score === 'number' ? parsed.score : parseInt(String(parsed.score), 10);
-      return Math.max(0, Math.min(100, isNaN(score) ? 0 : score));
+      const rawScore = typeof parsed.score === 'number' ? parsed.score : parseInt(String(parsed.score), 10);
+      const score = Math.max(0, Math.min(100, isNaN(rawScore) ? 0 : rawScore));
+
+      const rawIntent =
+        typeof parsed.intent_score === 'number'
+          ? parsed.intent_score
+          : parsed.intent_score != null
+            ? parseInt(String(parsed.intent_score), 10)
+            : score;
+      const intentScore = Math.max(0, Math.min(100, isNaN(rawIntent) ? score : rawIntent));
+
+      const rawFit =
+        typeof parsed.fit_score === 'number'
+          ? parsed.fit_score
+          : parsed.fit_score != null
+            ? parseInt(String(parsed.fit_score), 10)
+            : score;
+      const fitScore = Math.max(0, Math.min(100, isNaN(rawFit) ? score : rawFit));
+
+      const painTagsRaw =
+        Array.isArray(parsed.pain_tags) || typeof parsed.pain_tags === 'string'
+          ? parsed.pain_tags
+          : [];
+      const painTags =
+        typeof painTagsRaw === 'string'
+          ? painTagsRaw.split(',').map((t) => t.trim()).filter(Boolean)
+          : painTagsRaw.filter((t): t is string => typeof t === 'string');
+
+      const isNoise = parsed.is_noise === true || score < 20;
+
+      return {
+        score,
+        intentScore,
+        fitScore,
+        isNoise,
+        painTags,
+        reason: parsed.reason,
+      };
     } catch {
       const match = raw.match(/\d+/);
       const n = match ? parseInt(match[0], 10) : 0;
-      return Math.max(0, Math.min(100, n));
+      const score = Math.max(0, Math.min(100, n));
+      return {
+        score,
+        intentScore: score,
+        fitScore: score,
+        isNoise: score < 20,
+        painTags: [],
+        reason: undefined,
+      };
     }
   }
 

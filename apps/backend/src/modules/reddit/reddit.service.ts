@@ -51,6 +51,10 @@ export class RedditService implements OnModuleInit {
 
     for (const campaign of campaigns) {
       try {
+        // Fetch project to access brand & competitor names for mentions / share-of-voice.
+        const projectId = (campaign as any).project_id as number | undefined;
+        const project = projectId ? await this.supabase.getProjectById(projectId) : null;
+
         const posts = await this.searchSubreddits(
           campaign.subreddits,
           campaign.keywords,
@@ -58,7 +62,69 @@ export class RedditService implements OnModuleInit {
         );
 
         for (const post of posts) {
-          const score = await this.ai.scoreIntent(post.title, post.selftext);
+          const analysis = await this.ai.analyzeIntent(post.title, post.selftext);
+          const score = analysis.score;
+
+          // High‑intent notifications (less noisy alerts)
+          if (analysis.intentScore >= 80 && !analysis.isNoise) {
+            await this.supabase.createNotification({
+              user_id: campaign.user_id,
+              kind: 'lead_high_intent',
+              payload: {
+                campaign_id: campaign.id,
+                subreddit: post.subreddit,
+                title: post.title,
+                score,
+                intent_score: analysis.intentScore,
+              },
+            });
+          }
+
+          // Brand & competitor mentions (share of voice)
+          if (project) {
+            const text = `${post.title} ${post.selftext}`.toLowerCase();
+            const projectBrands = Array.isArray(project.brand_variations) ? project.brand_variations : [];
+            const competitors = Array.isArray(project.competitors) ? project.competitors : [];
+
+            for (const name of projectBrands) {
+              if (name && text.includes(String(name).toLowerCase())) {
+                await this.supabase.insertMention({
+                  user_id: project.user_id,
+                  project_id: project.id,
+                  kind: 'brand',
+                  name: String(name),
+                  post_id: post.id,
+                  subreddit: post.subreddit,
+                  username: post.author,
+                  title: post.title,
+                  content: post.selftext,
+                  score,
+                  post_url: post.permalink,
+                });
+                break;
+              }
+            }
+
+            for (const name of competitors) {
+              if (name && text.includes(String(name).toLowerCase())) {
+                await this.supabase.insertMention({
+                  user_id: project.user_id,
+                  project_id: project.id,
+                  kind: 'competitor',
+                  name: String(name),
+                  post_id: post.id,
+                  subreddit: post.subreddit,
+                  username: post.author,
+                  title: post.title,
+                  content: post.selftext,
+                  score,
+                  post_url: post.permalink,
+                });
+                break;
+              }
+            }
+          }
+
           if (score >= campaign.score_threshold) {
             await this.supabase.insertLead({
               campaign_id: campaign.id,
@@ -68,6 +134,10 @@ export class RedditService implements OnModuleInit {
               title: post.title,
               content: post.selftext,
               score,
+              intent_score: analysis.intentScore,
+              fit_score: analysis.fitScore,
+              is_noise: analysis.isNoise,
+              pain_tags: analysis.painTags,
               post_url: post.permalink,
             });
             leadsAdded++;

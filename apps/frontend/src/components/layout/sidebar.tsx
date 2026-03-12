@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { useProject } from '@/contexts/project-context';
 import { useProjects } from '@/lib/queries';
 import { useAuth } from '@/contexts/auth-context';
-import { useDashboardStats } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -23,13 +22,13 @@ import {
   AtSign,
   Archive,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/opportunities', label: 'New Opportunities', icon: Zap },
   { href: '/searchbox', label: 'Searchbox', icon: Search },
   { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/leads', label: 'Leads', icon: MessageSquare },
@@ -205,12 +204,16 @@ function SidebarUserBlock() {
   );
 }
 
-export function Sidebar({ onNewCampaign, inDrawer, onClose }: { onNewCampaign?: () => void; inDrawer?: boolean; onClose?: () => void }) {
+export function Sidebar({ inDrawer, onClose }: { onNewCampaign?: () => void; inDrawer?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
-  const { projectId } = useProject();
-  const { data: stats } = useDashboardStats(projectId);
-  const campaignCount = stats?.campaignCount ?? 0;
-  const leadCount = stats?.leadCount ?? 0;
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  // Clear optimistic state when pathname catches up or changes (e.g. browser back)
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  const effectivePath = pendingHref ?? pathname;
 
   return (
     <aside
@@ -244,10 +247,13 @@ export function Sidebar({ onNewCampaign, inDrawer, onClose }: { onNewCampaign?: 
             <Link
               key={href}
               href={href}
-              onClick={inDrawer ? onClose : undefined}
+              onClick={() => {
+                setPendingHref(href);
+                inDrawer && onClose?.();
+              }}
               className={cn(
                 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                pathname.startsWith(href)
+                effectivePath.startsWith(href)
                   ? 'bg-slate-100 text-slate-900'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
               )}
@@ -257,49 +263,6 @@ export function Sidebar({ onNewCampaign, inDrawer, onClose }: { onNewCampaign?: 
             </Link>
           ))}
         </nav>
-
-        {/* Widgets */}
-        <div className="mt-6 space-y-3">
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <div className="flex items-center gap-2 text-slate-700">
-              <Zap className="h-4 w-4 text-orange-500" />
-              <span className="text-sm font-medium">Leads</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{leadCount}</p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-orange-400 transition-all"
-                style={{ width: leadCount > 0 ? `${Math.min(100, leadCount)}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <div className="flex items-center gap-2 text-slate-700">
-              <MessageSquare className="h-4 w-4 text-orange-500" />
-              <span className="text-sm font-medium">Campaigns</span>
-            </div>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{campaignCount}</p>
-            <div className="mt-2 flex gap-1">
-              <div
-                className="h-1.5 flex-1 rounded-full bg-emerald-400"
-                style={{ width: campaignCount > 0 ? '33%' : '0%' }}
-              />
-              <div className="h-1.5 flex-1 rounded-full bg-slate-200" />
-              <div className="h-1.5 flex-1 rounded-full bg-slate-200" />
-            </div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="mt-6">
-          <Button
-            onClick={onNewCampaign}
-            className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white h-11 rounded-xl shadow-sm font-medium"
-          >
-            <Zap className="h-4 w-4 mr-2" />
-            Get leads now
-          </Button>
-        </div>
       </div>
 
       {/* User block */}

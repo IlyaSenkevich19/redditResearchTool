@@ -11,6 +11,13 @@ export interface Campaign {
   is_active: boolean;
 }
 
+export interface Project {
+  id: number;
+  user_id: string;
+  brand_variations: string[];
+  competitors: string[];
+}
+
 @Injectable()
 export class SupabaseService {
   private get client() {
@@ -72,5 +79,60 @@ export class SupabaseService {
       .single();
     if (error) throw error;
     return data;
+  }
+
+  async getProjectById(projectId: number): Promise<Project | null> {
+    const { data, error } = await this.client
+      .from('projects')
+      .select('id, user_id, brand_variations, competitors')
+      .eq('id', projectId)
+      .single();
+    if (error) {
+      // For safety, log and return null instead of throwing here to not break scans completely.
+      // eslint-disable-next-line no-console
+      console.error('getProjectById error', error);
+      return null;
+    }
+    return data as Project;
+  }
+
+  async insertMention(row: {
+    user_id: string;
+    project_id: number;
+    kind: 'brand' | 'competitor';
+    name: string;
+    post_id: string;
+    subreddit?: string;
+    username?: string;
+    title?: string;
+    content?: string;
+    score?: number;
+    post_url?: string;
+  }) {
+    const { error } = await this.client.from('mentions').upsert(
+      {
+        ...row,
+      },
+      {
+        onConflict: 'project_id,post_id,kind',
+        ignoreDuplicates: true,
+      },
+    );
+    if (error) throw error;
+  }
+
+  async createNotification(row: {
+    user_id: string;
+    kind: string;
+    payload?: Record<string, unknown>;
+    channel?: string;
+  }) {
+    const { error } = await this.client.from('notifications').insert({
+      user_id: row.user_id,
+      kind: row.kind,
+      payload: row.payload ?? {},
+      channel: row.channel ?? 'in_app',
+    });
+    if (error) throw error;
   }
 }

@@ -8,6 +8,7 @@ export interface LeadsListParams {
 }
 
 function normalizeLead(row: Record<string, unknown>): Lead {
+  const pain = row.pain_tags;
   return {
     id: Number(row.id),
     campaign_id: Number(row.campaign_id),
@@ -19,6 +20,8 @@ function normalizeLead(row: Record<string, unknown>): Lead {
     score: Number(row.score ?? 0),
     post_url: String(row.post_url ?? ''),
     created_at: row.created_at != null ? String(row.created_at) : undefined,
+    intent_score: row.intent_score != null ? Number(row.intent_score) : undefined,
+    pain_tags: Array.isArray(pain) ? pain.filter((x): x is string => typeof x === 'string') : undefined,
   };
 }
 
@@ -26,7 +29,7 @@ export async function listLeads(params?: LeadsListParams): Promise<Lead[]> {
   const client = createClient();
   let query = client
     .from('leads')
-    .select('id, campaign_id, post_id, subreddit, username, title, content, score, post_url, created_at')
+    .select('id, campaign_id, post_id, subreddit, username, title, content, score, post_url, created_at, intent_score, pain_tags')
     .order('created_at', { ascending: false });
 
   if (params?.campaignId != null) {

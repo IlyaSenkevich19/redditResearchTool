@@ -9,5 +9,7 @@ export interface Lead {
   score: number;
   post_url: string;
   created_at?: string;
+  intent_score?: number;
+  pain_tags?: string[];
 }
 
